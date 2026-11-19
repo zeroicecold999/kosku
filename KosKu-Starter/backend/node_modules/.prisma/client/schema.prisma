@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RoomStatus {
+  VACANT
+  OCCUPIED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REJECTED
+}
+
+enum NotificationStatus {
+  NOT_CONFIGURED
+  SENT
+  FAILED
+}
+
+model Owner {
+  id             String          @id @default(uuid())
+  name           String
+  email          String          @unique
+  passwordHash   String
+  tokenVersion   Int             @default(0)
+  createdAt      DateTime        @default(now())
+  rooms          Room[]
+  invites        Invite[]
+  applications   Application[]
+  passwordResets PasswordReset[]
+  auditLogs      AuditLog[]
+  payments       Payment[]
+}
+
+model Room {
+  id        String       @id @default(uuid())
+  name      String
+  price     Int
+  status    RoomStatus   @default(VACANT)
+  ownerId   String
+  owner     Owner        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+  tenant    Application?
+}
+
+model Invite {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  active    Boolean  @default(true)
+  ownerId   String
+  owner     Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Application {
+  id                 String             @id @default(uuid())
+  fullName           String
+  whatsapp           String
+  occupation         String?
+  moveInDate         DateTime?
+  note               String?
+  status             ApplicationStatus  @default(PENDING)
+  notificationStatus NotificationStatus @default(NOT_CONFIGURED)
+  roomId             String?            @unique
+  room               Room?              @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  ownerId            String
+  owner              Owner              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  payments           Payment[]
+  createdAt          DateTime           @default(now())
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  ownerId   String
+  owner     Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([ownerId])
+  @@index([expiresAt])
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  amount         Int
+  billingMonth   DateTime
+  status         PaymentStatus @default(PENDING)
+  method         String?
+  note           String?
+  paidAt         DateTime?
+  gatewayOrderId String?       @unique
+  gatewayToken   String?
+  paymentUrl     String?
+  ownerId        String
+  owner          Owner         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  applicationId  String
+  application    Application   @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([ownerId, billingMonth])
+  @@index([applicationId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  ownerId   String?
+  owner     Owner?   @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([ownerId, createdAt])
+  @@index([entity, entityId])
+}
